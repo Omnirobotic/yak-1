@@ -63,7 +63,7 @@ void kfusion::cuda::TsdfVolume::setTruncDist(float distance)
 {
   Vec3f vsz = getVoxelSize();
   float max_coeff = std::max<float>(std::max<float>(vsz[0], vsz[1]), vsz[2]);
-  trunc_dist_ = std::max(distance, 2.1f * max_coeff);
+  trunc_dist_ = std::max(distance, 1.3f * max_coeff);
 }
 
 int kfusion::cuda::TsdfVolume::getMaxWeight() const { return max_weight_; }
@@ -180,4 +180,15 @@ void kfusion::cuda::TsdfVolume::fetchNormals(const DeviceArray<Point>& cloud, De
   device::TsdfVolume volume(
       (device::TsdfVolume::elem_type*)data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
   device::extractNormals(volume, c, aff, Rinv, gradient_delta_factor_, (float4*)normals.ptr());
+}
+
+CudaData kfusion::cuda::TsdfVolume::marchingCubes(int min_weight)
+{
+	device::Vec3i dims = device_cast<device::Vec3i>(dims_);
+	device::Vec3f vsz = device_cast<device::Vec3f>(getVoxelSize());
+
+	device::TsdfVolume volume(data_.ptr<device::TsdfVolume::elem_type>(), dims, vsz, trunc_dist_, max_weight_);
+	DeviceArray<float3> output = device::marchingCubes(volume, min_weight);
+
+	return output;
 }

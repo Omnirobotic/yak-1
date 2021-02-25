@@ -53,6 +53,8 @@ public:
   DeviceArray<Point> fetchCloud(DeviceArray<Point>& cloud_buffer) const;
   void fetchNormals(const DeviceArray<Point>& cloud, DeviceArray<Normal>& normals) const;
 
+  CudaData marchingCubes(int min_weight);
+
   struct Entry
   {
     typedef unsigned short half;

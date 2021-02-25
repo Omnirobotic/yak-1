@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseWithDebugInfo|x64">
+      <Configuration>ReleaseWithDebugInfo</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{222D7120-D3A2-4E90-A309-40FA71F7A174}</ProjectGuid>
+    <RootNamespace>YakLib</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 11.1.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Boost.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Eigen.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\opencv.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Workspace.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\DebugVariables.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Boost.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Eigen.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\opencv.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\PCL.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Workspace.props" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Boost.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Eigen.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\opencv.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\PCL.props" />
+    <Import Project="$(SolutionDir)VSProjectProperties\Workspace.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetExt>.dll</TargetExt>
+    <OutDir>$(SolutionDir)_out\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)_out\temp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetExt>.dll</TargetExt>
+    <OutDir>$(SolutionDir)_out\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)_out\temp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">
+    <TargetExt>.dll</TargetExt>
+    <OutDir>$(SolutionDir)_out\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(SolutionDir)_out\temp\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(CUDA_PATH)\include;$(Boost_ROOT);$(PCL_ROOT)\include;$(Eigen_ROOT)\include;$(OPENCV_ROOT)\include;$(SolutionDir)include;yak\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <PreprocessorDefinitions>_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;KFUSION_API_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <CudaCompile>
+      <Include>$(CUDA_PATH)\include;</Include>
+    </CudaCompile>
+    <CudaLink>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
+    </CudaLink>
+    <Link>
+      <AdditionalDependencies>cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(CUDA_PATH)\include;$(Boost_ROOT);$(PCL_ROOT)\include;$(Eigen_ROOT)\include;$(OPENCV_ROOT)\include;$(SolutionDir)include;yak\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <PreprocessorDefinitions>_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;KFUSION_API_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CudaLink>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
+    </CudaLink>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseWithDebugInfo|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>$(CUDA_PATH)\include;$(Boost_ROOT);$(PCL_ROOT)\include;$(Eigen_ROOT)\include;$(OPENCV_ROOT)\include;$(SolutionDir)include;yak\include</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp14</LanguageStandard>
+      <PreprocessorDefinitions>_SILENCE_ALL_CXX17_DEPRECATION_WARNINGS;KFUSION_API_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>cuda.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <CudaLink>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)\lib\x64</AdditionalLibraryDirectories>
+    </CudaLink>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CudaCompile Include="yak\src\cuda\imgproc.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
+    <CudaCompile Include="yak\src\cuda\proj_icp.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
+    <CudaCompile Include="yak\src\cuda\tsdf_volume.cu">
+      <FileType>Document</FileType>
+    </CudaCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="yak\src\kfusion\core.cpp" />
+    <ClCompile Include="yak\src\kfusion\device_memory.cpp" />
+    <ClCompile Include="yak\src\kfusion\imgproc.cpp" />
+    <ClCompile Include="yak\src\kfusion\kinfu.cpp" />
+    <ClCompile Include="yak\src\kfusion\precomp.cpp" />
+    <ClCompile Include="yak\src\kfusion\projective_icp.cpp" />
+    <ClCompile Include="yak\src\kfusion\tsdf_container.cpp" />
+    <ClCompile Include="yak\src\kfusion\tsdf_volume.cpp" />
+    <ClCompile Include="yak\src\mc\marching_cubes_tables.cpp" />
+    <ClCompile Include="yak\src\yak_server.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="yak\include\yak\kfusion\cuda\device.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\device_array.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\device_memory.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\imgproc.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\kernel_containers.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\projective_icp.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\temp_utils.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\texture_binder.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\cuda\tsdf_volume.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\exports.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\half.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\internal.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\kinfu.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\precomp.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\safe_call.hpp" />
+    <ClInclude Include="yak\include\yak\kfusion\tsdf_container.h" />
+    <ClInclude Include="yak\include\yak\kfusion\types.hpp" />
+    <ClInclude Include="yak\include\yak\yak_server.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\CUDA 11.1.targets" />
+  </ImportGroup>
+</Project>

@@ -1,15 +1,17 @@
 #include <yak/yak_server.h>
 #include <opencv2/highgui/highgui.hpp>  // named-window apparatus; TODO: Remove this
+#include <stdio.h>
 
 yak::FusionServer::FusionServer(const kfusion::KinFuParams& params, const Eigen::Affine3f& world_to_volume)
   : kinfu_(new kfusion::KinFu(params))
+  , world_to_volume_(world_to_volume)
   , volume_to_world_(world_to_volume.inverse())
   , last_camera_pose_(Eigen::Affine3f::Identity())
 {
   // Debug displays
-  cv::namedWindow("output", cv::WINDOW_NORMAL);
-  cv::moveWindow("output", 10, 10);
-  cv::resizeWindow("output", kinfu_->params().cols * 2, kinfu_->params().rows);
+  //cv::namedWindow("output", cv::WindowFlags::WINDOW_NORMAL);
+  //cv::moveWindow("output", 10, 10);
+  //cv::resizeWindow("output", kinfu_->params().cols * 2, kinfu_->params().rows);
 }
 
 bool yak::FusionServer::fuse(const cv::Mat& depth_data, const Eigen::Affine3f& world_to_camera)
@@ -33,7 +35,7 @@ bool yak::FusionServer::fuse(const cv::Mat& depth_data, const Eigen::Affine3f& w
   // Update the "last camera pose" TODO: Do I update this if the fusion step failed?
   last_camera_pose_ = current_camera_in_volume;
 
-  display();
+  //display();
 
   return result;
 }
@@ -50,6 +52,25 @@ bool yak::FusionServer::resetWithNewParams(const kfusion::KinFuParams& params)
   return true;
 }
 
+std::vector<Eigen::Vector3f> yak::FusionServer::marchingCubes(int min_weight)
+{
+  kfusion::cuda::CudaData deviceVerts = kinfu_->tsdf().marchingCubes(min_weight);
+
+  size_t nVerts = deviceVerts.sizeBytes() / sizeof(float) / 3;
+
+  float* vertices = new float[nVerts * 3];
+  deviceVerts.download(vertices);
+
+  std::vector<Eigen::Vector3f> result;
+  for (int i = 0; i < nVerts; ++i) {
+	  Eigen::Vector3f v(vertices[3 * i], vertices[3 * i + 1], vertices[3 * i + 2]);
+	  result.push_back(world_to_volume_ * v);
+  }
+
+  delete[] vertices;
+  return result;
+}
+
 // void yak::FusionServer::getCloud(pcl::PointCloud<pcl::PointXYZ>& cloud) const
 //{
 //  const auto points = kinfu_->downloadCloud();
@@ -63,17 +84,17 @@ bool yak::FusionServer::resetWithNewParams(const kfusion::KinFuParams& params)
 //    return pcl_pt;
 //  });
 //}
-
-yak::TSDFContainer yak::FusionServer::downloadTSDF()
-{
-  const kfusion::cuda::TsdfVolume& vol = kinfu_->tsdf();
-  const cv::Vec3i& vol_dims = vol.getDims();
-
-  yak::TSDFContainer result(vol_dims[0], vol_dims[1], vol_dims[2]);
-  vol.data().download(result.data());
-
-  return result;
-}
+//
+//yak::TSDFContainer yak::FusionServer::downloadTSDF()
+//{
+//  const kfusion::cuda::TsdfVolume& vol = kinfu_->tsdf();
+//  const cv::Vec3i& vol_dims = vol.getDims();
+//
+//  yak::TSDFContainer result(vol_dims[0], vol_dims[1], vol_dims[2]);
+//  vol.data().download(result.data());
+//
+//  return result;
+//}
 
 bool yak::FusionServer::step(const Eigen::Affine3f& current_pose,
                              const Eigen::Affine3f& last_pose,
@@ -107,4 +128,9 @@ void yak::FusionServer::display(const Eigen::Affine3f& pose)
 {
   kinfu_->renderImage(viewDevice_, pose, 3);
   downloadAndDisplayView();
+}
+
+void yak::FusionServer::render(kfusion::cuda::Image& device, const Eigen::Affine3f& pose)
+{
+  kinfu_->renderImage(device, pose, 2);
 }

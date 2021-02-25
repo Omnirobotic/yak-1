@@ -1,4 +1,4 @@
-#include "marching_cubes_tables.h"
+#include "yak/mc/marching_cubes_tables.h"
 
 #include <pcl/PolygonMesh.h>
 #include <pcl/io/ply_io.h>

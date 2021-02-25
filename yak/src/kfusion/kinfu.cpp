@@ -1,6 +1,8 @@
 #include "yak/kfusion/precomp.hpp"
 #include "yak/kfusion/internal.hpp"
+#include "yak/kfusion/half.hpp"
 #include <stdio.h>
+#include <opencv2/highgui/highgui.hpp>  
 using namespace std;
 using namespace kfusion;
 using namespace kfusion::cuda;
@@ -169,6 +171,24 @@ bool kfusion::KinFu::operator()(const Affine3f& inputCameraMotion,
   const int LEVELS = icp_->getUsedLevelsNum();
 
   cuda::computeDists(depth, dists_, p.intr);
+
+  //Note JFD Temporary debuging code to be remove later
+/*
+  std::vector<uint16_t> values;
+  int data_size=0;
+  dists_.download(values, data_size);
+
+  int col_size = 0;
+  std::vector<uint16_t> img_values;
+  depth.download(img_values, col_size);
+
+  cv::Mat img(480, 640, CV_16U,(void*) &(img_values[0]));
+  cv::Mat img8;
+  img.convertTo(img8, CV_8UC1, 0.1, 0.0);
+  cv::imshow("output", img8);
+  cv::waitKey(100);
+*/
+
   cuda::depthBilateralFilter(
       depth, curr_.depth_pyr[0], p.bilateral_kernel_size, p.bilateral_sigma_spatial, p.bilateral_sigma_depth);
 
@@ -190,7 +210,7 @@ bool kfusion::KinFu::operator()(const Affine3f& inputCameraMotion,
   // can't perform more on first frame
   if (frame_counter_ == 0)
   {
-    volume_->integrate(dists_, poses_.at(poses_.size() - 1), p.intr);
+    volume_->integrate(dists_, currentCameraPose, p.intr);
 #if defined USE_DEPTH
     curr_.depth_pyr.swap(prev_.depth_pyr);
 #else
@@ -222,8 +242,9 @@ bool kfusion::KinFu::operator()(const Affine3f& inputCameraMotion,
   {
     // ScopeTime time("icp");
 #if defined USE_DEPTH
-    bool ok =
-        icp_->estimateTransform(affine, p.intr, curr_.depth_pyr, curr_.normals_pyr, prev_.depth_pyr, prev_.normals_pyr);
+    //add this line of code below so it can compile with the USE_DEPTH define  there was some lines of code missing evidently (JFD)
+    Affine3f affine= Affine3f::Identity();
+    bool ok = icp_->estimateTransform(affine, p.intr, curr_.depth_pyr, curr_.normals_pyr, prev_.depth_pyr, prev_.normals_pyr);
 #else
     bool ok = true;
     if (params_.use_icp)

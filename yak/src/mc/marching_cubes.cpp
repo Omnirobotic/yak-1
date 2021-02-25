@@ -1,13 +1,6 @@
 #include "yak/mc/marching_cubes.h"
-#include "marching_cubes_tables.h"
+#include "yak/mc/marching_cubes_tables.h"
 #include <pcl/io/ply_io.h>
-#include <pcl/surface/vtk_smoothing/vtk_utils.h>
-
-#include <vtkSmartPointer.h>
-#include <vtkTriangle.h>
-#include <vtkCellArray.h>
-#include <vtkPolyData.h>
-#include <vtkCleanPolyData.h>
 
 #include <omp.h>
 
@@ -155,70 +148,94 @@ std::vector<Triangle> processCube(const yak::TSDFContainer& grid, int x, int y, 
   return triangles;
 }
 
+
+
 pcl::PolygonMesh makeMesh(const yak::TSDFContainer& grid, const yak::MarchingCubesParameters& params)
 {
-  vtkSmartPointer<vtkPoints> points = vtkSmartPointer<vtkPoints>::New();
-  vtkSmartPointer<vtkCellArray> triangles = vtkSmartPointer<vtkCellArray>::New();
-  double s = params.scale;
+  const int max_threads = omp_get_max_threads();
+  std::vector<std::vector<Triangle>> triangle_buffers(max_threads);
+
 #pragma omp parallel for
   for (int x = 1; x < grid.dims().x(); ++x)
   {
+    const int tid = omp_get_thread_num();
+
     for (int y = 1; y < grid.dims().y(); ++y)
     {
       for (int z = 1; z < grid.dims().z(); ++z)
       {
         std::vector<Triangle> ts = processCube(grid, x - 1, y - 1, z - 1, params.min_weight);
-#pragma omp critical
-        {
-          for (auto& t : ts)
-          {
-            vtkIdType p1 = points->InsertNextPoint(s * static_cast<double>(t.v[0].x()),
-                                                   s * static_cast<double>(t.v[0].y()),
-                                                   s * static_cast<double>(t.v[0].z()));
-            vtkIdType p2 = points->InsertNextPoint(s * static_cast<double>(t.v[1].x()),
-                                                   s * static_cast<double>(t.v[1].y()),
-                                                   s * static_cast<double>(t.v[1].z()));
-            vtkIdType p3 = points->InsertNextPoint(s * static_cast<double>(t.v[2].x()),
-                                                   s * static_cast<double>(t.v[2].y()),
-                                                   s * static_cast<double>(t.v[2].z()));
-
-            vtkSmartPointer<vtkTriangle> triangle = vtkSmartPointer<vtkTriangle>::New();
-            triangle->GetPointIds()->SetId(0, p1);
-            triangle->GetPointIds()->SetId(1, p2);
-            triangle->GetPointIds()->SetId(2, p3);
-            triangles->InsertNextCell(triangle);
-          }
-        }
+        triangle_buffers[tid].insert(triangle_buffers[tid].end(), ts.begin(), ts.end());
       }
     }
   }
 
-  // Create a polydata object
-  vtkSmartPointer<vtkPolyData> polyData = vtkSmartPointer<vtkPolyData>::New();
+  std::size_t n_triangles = 0;
+  for (const auto& buffer : triangle_buffers)
+    n_triangles += buffer.size();
 
-  // Add the geometry and topology to the polydata
-  polyData->SetPoints(points);
-  polyData->SetPolys(triangles);
-
+  // Now we have polygon soup. Let's add em all to the polygon mesh
   pcl::PolygonMesh mesh;
-  if (params.clean)
-  {
-    // Marching cubes produces duplicate vertices so lets clean up the mesh
-    vtkSmartPointer<vtkCleanPolyData> cleanPolyData = vtkSmartPointer<vtkCleanPolyData>::New();
-    cleanPolyData->SetInputData(polyData);
-    cleanPolyData->SetPointMerging(true);
-    cleanPolyData->SetConvertPolysToLines(true);
-    cleanPolyData->SetConvertLinesToPoints(true);
-    cleanPolyData->SetConvertStripsToPolys(true);
-    cleanPolyData->Update();
+  mesh.polygons.resize(n_triangles);  // We have N_TRIANGLES number of polygons, each of size 3
+  pcl::PointCloud<pcl::PointXYZ> vertices;
+  vertices.resize(n_triangles * 3);  // We have 3 times triangles number of vertices
 
-    pcl::VTKUtils::vtk2mesh(cleanPolyData->GetOutput(), mesh);
-  }
-  else
+  unsigned int counter = 0;
+  for (std::size_t j = 0; j < triangle_buffers.size(); ++j)
+    for (unsigned i = 0; i < triangle_buffers[j].size(); ++i)
+    {
+      auto idx = counter * 3;
+      auto& verts = mesh.polygons[counter];
+      verts.vertices = { idx, idx + 1, idx + 2 };
+
+      const float scale = static_cast<float>(params.scale);
+      const auto v0 = triangle_buffers[j][i].v[0] * scale;
+      const auto v1 = triangle_buffers[j][i].v[1] * scale;
+      const auto v2 = triangle_buffers[j][i].v[2] * scale;
+
+      vertices[idx + 0] = pcl::PointXYZ(v0.x(), v0.y(), v0.z());
+      vertices[idx + 1] = pcl::PointXYZ(v1.x(), v1.y(), v1.z());
+      vertices[idx + 2] = pcl::PointXYZ(v2.x(), v2.y(), v2.z());
+
+      counter++;
+    }
+
+  pcl::toPCLPointCloud2(vertices, mesh.cloud);
+
+#if 1
+  // Open File
+  FILE *meshFile = NULL;
+  errno_t err = fopen_s(&meshFile, "c:/code/test1.stl", "wb");
+
+  // Write the header line
+  const unsigned char header[80] = { 0 };   // initialize all values to 0
+  fwrite(&header, sizeof(unsigned char), sizeof(header), meshFile);
+
+  int numTriangles = counter;
+  // Write number of triangles
+  fwrite(&numTriangles, sizeof(int), 1, meshFile);
+
+  // Sequentially write the normal, 3 vertices of the triangle and attribute, for each triangle
+  for (unsigned int t = 0; t < numTriangles; ++t)
   {
-    pcl::VTKUtils::vtk2mesh(polyData, mesh);
+	  float normal[3];
+	  // Write normal
+	  fwrite(&normal, sizeof(float), 3, meshFile);
+
+	  // Write vertices
+	  for (unsigned int v = 0; v < 3; v++)
+	  {
+		  auto vertex = vertices[t * 3 + v];
+		  fwrite(vertex.data, sizeof(float), 3, meshFile);
+	  }
+
+	  unsigned short attribute = 0;
+	  fwrite(&attribute, sizeof(unsigned short), 1, meshFile);
   }
 
+  fflush(meshFile);
+  fclose(meshFile);
+#endif
   return mesh;
 }
 
@@ -227,4 +244,32 @@ pcl::PolygonMesh makeMesh(const yak::TSDFContainer& grid, const yak::MarchingCub
 pcl::PolygonMesh yak::marchingCubesCPU(const yak::TSDFContainer& tsdf, const MarchingCubesParameters& params)
 {
   return makeMesh(tsdf, params);
+}
+
+
+int  yak::count_non_null_value(const yak::TSDFContainer& grid)
+{
+    auto read = [&grid](int x, int y, int z, uint16_t& w) {
+        half_float::half f;
+        grid.read(grid.toIndex(x, y, z), f, w);
+        return 5.0f * float(f);
+    };
+    int count = 0;
+    for (int x = 1; x < grid.dims().x(); ++x)
+    {
+        for (int y = 1; y < grid.dims().y(); ++y)
+        {
+            for (int z = 1; z < grid.dims().z(); ++z)
+            {
+                float value = 0;
+                uint16_t weight = 0;
+                value = read(x, y, z, weight);
+                if (value != 0)
+                {
+                    count++;
+                }
+            }
+        }
+    }
+    return count;
 }

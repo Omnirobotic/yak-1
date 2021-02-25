@@ -1,6 +1,10 @@
 #include "yak/kfusion/cuda/device.hpp"
 #include "yak/kfusion/cuda/texture_binder.hpp"
+#include "yak/mc/marching_cubes_tables.h"
 //#include <stdio.h>
+
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
 
 using namespace kfusion::device;
 
@@ -68,7 +72,7 @@ namespace kfusion
                     //float3 zstep = vol2cam.R * make_float3(0.f, 0.f, volume.voxel_size.z);
                     float3 zstep = make_float3(vol2cam.R.data[0].z, vol2cam.R.data[1].z, vol2cam.R.data[2].z) * volume.voxel_size.z;
 
-                    float3 vx = make_float3(x * volume.voxel_size.x, y * volume.voxel_size.y, 0);
+                    float3 vx = make_float3(x * volume.voxel_size.x, y * volume.voxel_size.y, 0.0f);
                     float3 vc = vol2cam * vx; //tranform from volume coo frame to camera one
 
 
@@ -88,8 +92,9 @@ namespace kfusion
 
                         if (Dp == 0 || vc.z <= 0)
                             continue;
-
-                        float sdf = Dp - __fsqrt_rn(dot(vc, vc)); //Dp - norm(v)
+                                        
+                        float normv = __fsqrt_rn(dot(vc, vc));
+                        float sdf = Dp - normv; 
 
                         if (sdf >= -volume.trunc_dist)
                         {
@@ -129,7 +134,6 @@ void kfusion::device::integrate(const Dists& dists, TsdfVolume& volume, const Af
     dists_tex.addressMode[1] = cudaAddressModeBorder;
     dists_tex.addressMode[2] = cudaAddressModeBorder;
     TextureBinder binder(dists, dists_tex, cudaCreateChannelDescHalf());
-    (void) binder;
 
     dim3 block(32, 8);
     dim3 grid(divUp(volume.dims.x, block.x), divUp(volume.dims.y, block.y));
@@ -793,4 +797,209 @@ void kfusion::device::extractNormals(const TsdfVolume& volume, const PtrSz<Point
     extract_normals_kernel<<<grid, block>>>(en, output);
     cudaSafeCall(cudaGetLastError());
     cudaSafeCall(cudaDeviceSynchronize());
+}
+
+namespace kfusion
+{
+	namespace device
+	{
+		__kf_device__ int compute_index(TsdfVolume& volume, int x, int y, int z, int min_weight, float values[8])
+		{
+			int weight;
+			int index = 0;
+			index =  int((values[0] = unpack_tsdf(*volume(x + 0, y + 0, z + 0), weight)) < 0.0);
+			if (weight < min_weight) return 0;
+			index += int((values[1] = unpack_tsdf(*volume(x + 1, y + 0, z + 0), weight)) < 0.0) * 2;
+			if (weight < min_weight) return 0;
+			index += int((values[2] = unpack_tsdf(*volume(x + 1, y + 1, z + 0), weight)) < 0.0) * 4;
+			if (weight < min_weight) return 0;
+			index += int((values[3] = unpack_tsdf(*volume(x + 0, y + 1, z + 0), weight)) < 0.0) * 8;
+			if (weight < min_weight) return 0;
+			index += int((values[4] = unpack_tsdf(*volume(x + 0, y + 0, z + 1), weight)) < 0.0) * 16;
+			if (weight < min_weight) return 0;
+			index += int((values[5] = unpack_tsdf(*volume(x + 1, y + 0, z + 1), weight)) < 0.0) * 32;
+			if (weight < min_weight) return 0;
+			index += int((values[6] = unpack_tsdf(*volume(x + 1, y + 1, z + 1), weight)) < 0.0) * 64;
+			if (weight < min_weight) return 0;
+			index += int((values[7] = unpack_tsdf(*volume(x + 0, y + 1, z + 1), weight)) < 0.0) * 128;
+			if (weight < min_weight) return 0;
+			return index;
+		}
+		__global__ void classify_voxels_kernel(TsdfVolume volume, int min_weight, PtrSz<int> numVertsTable,
+			                                   PtrSz<uchar> voxelVertices, PtrSz<uchar> voxelOccupied)
+		{
+			int x = blockIdx.x * blockDim.x + threadIdx.x;
+			int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+			if (x >= volume.dims.x-1 || y >= volume.dims.y-1)
+				return;
+
+			for (int z = 0; z < volume.dims.z-1; ++z) {
+				float values[8];
+				int index = compute_index(volume, x, y, z, min_weight, values);
+				int i = x + y * (volume.dims.x-1) + z * (volume.dims.x-1) * (volume.dims.y-1);
+				int nVerts = numVertsTable[index];
+				voxelVertices[i] = nVerts;
+				voxelOccupied[i] = nVerts > 0;
+			}
+		}
+
+		__global__ void compact_voxels_kernel(PtrSz<uchar> voxelOccupied, PtrSz<unsigned int> voxelOccupiedScan,
+			                                  int3 dims, PtrSz<unsigned int> voxelOccupiedCompact)
+		{
+			int x = blockIdx.x * blockDim.x + threadIdx.x;
+			int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+			if (x >= dims.x - 1 || y >= dims.y - 1)
+				return;
+
+			for (int z = 0; z < dims.z - 1; ++z) {
+				int i = x + y * (dims.x - 1) + z * (dims.x - 1) * (dims.y - 1);
+				if (voxelOccupied[i]) {
+					voxelOccupiedCompact[voxelOccupiedScan[i]] = i;
+				}
+			}
+		}
+		__kf_device__
+		float3 vertex_interpolate(const float3 p0, const float3 p1, const float f0, const float f1)
+		{
+			float t = (0.f - f0) / (f1 - f0 + 1e-15f);
+			return make_float3(p0.x + t * (p1.x - p0.x),
+				               p0.y + t * (p1.y - p0.y),
+			                   p0.z + t * (p1.z - p0.z));
+		}
+
+
+		__global__ void generate_triangles_kernel(TsdfVolume volume, int min_weight,
+			                                      PtrSz<unsigned int> voxelOccupiedCompact,
+			                                      PtrSz<unsigned int> voxelVerticesScan,
+			                                      PtrSz<int> numVertsTable, PtrSz<int> triangleTable,
+			                                      PtrSz<float3> output)
+		{
+			int i = (blockIdx.y * 65536 + blockIdx.x) * 256 + threadIdx.x;
+			if (i >= voxelOccupiedCompact.size) {
+				i = voxelOccupiedCompact.size - 1;
+			}
+
+			int voxel = voxelOccupiedCompact[i];
+			const int z = voxel / ((volume.dims.x-1) * (volume.dims.y-1));
+			const int y = (voxel - z * (volume.dims.x-1) * (volume.dims.y-1)) / (volume.dims.x-1);
+			const int x = (voxel - z * (volume.dims.x-1) * (volume.dims.y-1)) - y * (volume.dims.x-1);
+
+			float3 p = make_float3(x, y, z) * volume.voxel_size;
+
+			float3 v[8];
+			v[0] = p;
+			v[1] = p + make_float3(volume.voxel_size.x, 0, 0);
+			v[2] = p + make_float3(volume.voxel_size.x, volume.voxel_size.y, 0);
+			v[3] = p + make_float3(0, volume.voxel_size.y, 0);
+			v[4] = p + make_float3(0, 0, volume.voxel_size.z);
+			v[5] = p + make_float3(volume.voxel_size.x, 0, volume.voxel_size.z);
+			v[6] = p + make_float3(volume.voxel_size.x, volume.voxel_size.y, volume.voxel_size.z);
+			v[7] = p + make_float3(0, volume.voxel_size.y, volume.voxel_size.z);
+
+			float values[8];
+			int index = compute_index(volume, x, y, z, min_weight, values);
+
+			__shared__ float3 vertex_list[12][256];
+			vertex_list[0][threadIdx.x] = vertex_interpolate(v[0], v[1], values[0], values[1]);
+			vertex_list[1][threadIdx.x] = vertex_interpolate(v[1], v[2], values[1], values[2]);
+			vertex_list[2][threadIdx.x] = vertex_interpolate(v[2], v[3], values[2], values[3]);
+			vertex_list[3][threadIdx.x] = vertex_interpolate(v[3], v[0], values[3], values[0]);
+			vertex_list[4][threadIdx.x] = vertex_interpolate(v[4], v[5], values[4], values[5]);
+			vertex_list[5][threadIdx.x] = vertex_interpolate(v[5], v[6], values[5], values[6]);
+			vertex_list[6][threadIdx.x] = vertex_interpolate(v[6], v[7], values[6], values[7]);
+			vertex_list[7][threadIdx.x] = vertex_interpolate(v[7], v[4], values[7], values[4]);
+			vertex_list[8][threadIdx.x] = vertex_interpolate(v[0], v[4], values[0], values[4]);
+			vertex_list[9][threadIdx.x] = vertex_interpolate(v[1], v[5], values[1], values[5]);
+			vertex_list[10][threadIdx.x] = vertex_interpolate(v[2], v[6], values[2], values[6]);
+			vertex_list[11][threadIdx.x] = vertex_interpolate(v[3], v[7], values[3], values[7]);
+			__syncthreads();
+
+			int nVerts = numVertsTable[index];
+			for (int v = 0; v < nVerts; v += 3) {
+				const int offset = voxelVerticesScan[voxel] + v;
+
+				const int v1 = triangleTable[(index * 16) + v + 0];
+				const int v2 = triangleTable[(index * 16) + v + 1];
+				const int v3 = triangleTable[(index * 16) + v + 2];
+
+				output[offset + 0] = vertex_list[v1][threadIdx.x];
+				output[offset + 1] = vertex_list[v2][threadIdx.x];
+				output[offset + 2] = vertex_list[v3][threadIdx.x];
+			}
+
+		}
+
+	}
+}
+
+unsigned int do_exclusive_scan(DeviceArray<uchar>& input, DeviceArray<unsigned int>& output)
+{
+	thrust::exclusive_scan(thrust::device_ptr<uchar>(input.ptr()),
+                           thrust::device_ptr<uchar>(input.ptr() + input.size()),
+                           thrust::device_ptr<unsigned int>(output.ptr()));
+
+	uchar lastElement;
+	cudaSafeCall(cudaMemcpy(&lastElement, input.ptr() + input.size() - 1,
+		                    sizeof(uchar), cudaMemcpyDeviceToHost));
+	unsigned int lastElementScan;
+	cudaSafeCall(cudaMemcpy(&lastElementScan, output.ptr() + output.size() - 1,
+	                        sizeof(unsigned int), cudaMemcpyDeviceToHost));
+
+	return lastElement + lastElementScan;
+}
+
+DeviceArray<float3> kfusion::device::marchingCubes(const TsdfVolume& volume, int min_weight)
+{
+	// Constant table with number of vertices per cube configuration
+	DeviceArray<int> numVertsTable(sizeof(yak::numVertsTable));
+	numVertsTable.upload(yak::numVertsTable, sizeof(yak::numVertsTable)/sizeof(yak::numVertsTable[0]));
+
+	// Identify all occupied voxels and number of vertices
+	// produced by each occupied voxel
+	int numVoxels = (volume.dims.x-1) * (volume.dims.y-1) * (volume.dims.z-1);
+	DeviceArray<uchar> voxelVertices(numVoxels);
+	DeviceArray<uchar> voxelOccupied(numVoxels);
+
+	dim3 block(32, 8);
+	dim3 grid(1, 1, 1);
+	grid.x = divUp(volume.dims.x, block.x);
+	grid.y = divUp(volume.dims.y, block.y);
+
+	classify_voxels_kernel<<<grid, block>>>(volume, min_weight, numVertsTable, voxelVertices, voxelOccupied);
+	cudaSafeCall(cudaGetLastError());
+
+	// Perform exclusive scan of the occupied voxels information in order to
+	// determine total number of occupied voxels
+	DeviceArray<unsigned int> voxelOccupiedScan(numVoxels);
+	unsigned int activeVoxels = do_exclusive_scan(voxelOccupied, voxelOccupiedScan);
+
+	// Create an array with only the voxels that are actually occupied
+	DeviceArray<unsigned int> voxelOccupiedCompact(activeVoxels);
+	compact_voxels_kernel<<<grid, block>>>(voxelOccupied, voxelOccupiedScan, volume.dims, voxelOccupiedCompact);
+
+	// Perform an exclusive scan of the array with number of vertices produced
+	// by each voxel. These values are used for indexing of the final output.
+	DeviceArray<unsigned int> voxelVerticesScan(numVoxels);
+	unsigned int numVertices = do_exclusive_scan(voxelVertices, voxelVerticesScan);
+
+	// Table with edges composing the triangle for each cube configuration
+	DeviceArray<int> triangleTable(sizeof(yak::triangleTable));
+	triangleTable.upload(&yak::triangleTable[0][0], sizeof(yak::triangleTable) / sizeof(int));
+
+	// Produce triangles from each occupied voxel
+	DeviceArray<float3> output(numVertices);
+
+	const int n_threads = 256;
+	dim3 genBlock(n_threads);
+	unsigned blocks_num = divUp(activeVoxels, n_threads);
+	dim3 genGrid(min(blocks_num, 65536), divUp(blocks_num, 65536));
+
+	generate_triangles_kernel<<<genGrid, genBlock>>>(volume, min_weight, voxelOccupiedCompact, voxelVerticesScan,
+		                                             numVertsTable, triangleTable, output);
+	cudaSafeCall(cudaGetLastError());
+
+
+	return output;
 }

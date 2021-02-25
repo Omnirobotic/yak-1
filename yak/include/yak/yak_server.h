@@ -21,7 +21,7 @@ namespace yak
  *
  * @note Absolutely nothing in here is thread safe
  */
-class FusionServer
+class KF_EXPORTS FusionServer
 {
 public:
   FusionServer(const kfusion::KinFuParams& params, const Eigen::Affine3f& world_to_volume);
@@ -32,6 +32,8 @@ public:
 
   bool resetWithNewParams(const kfusion::KinFuParams& params);
 
+  std::vector<Eigen::Vector3f> marchingCubes(int min_weight);
+
   //  void getCloud(pcl::PointCloud<pcl::PointXYZ>& cloud) const;
 
   yak::TSDFContainer downloadTSDF();
@@ -39,6 +41,11 @@ public:
   void display();
 
   void display(const Eigen::Affine3f& pose);
+
+  kfusion::KinFuParams& params() { return kinfu_->params(); }
+
+  void render(kfusion::cuda::Image& device, const Eigen::Affine3f& pose);
+
 
 private:
   bool step(const Eigen::Affine3f& current_pose, const Eigen::Affine3f& last_pose, const cv::Mat& depth);
@@ -52,6 +59,7 @@ private:
   kfusion::cuda::Image viewDevice_;
   kfusion::cuda::Depth depthDevice_;
 
+  Eigen::Affine3f world_to_volume_;
   Eigen::Affine3f volume_to_world_;
   Eigen::Affine3f last_camera_pose_;
 

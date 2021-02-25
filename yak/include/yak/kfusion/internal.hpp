@@ -180,6 +180,8 @@ void extractNormals(const TsdfVolume& volume,
                     float gradient_delta_factor,
                     float4* output);
 
+DeviceArray<float3> marchingCubes(const TsdfVolume& volume, int min_weight);
+
 struct float8
 {
   float x, y, z, w, c1, c2, c3, c4;
