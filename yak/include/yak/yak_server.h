@@ -14,8 +14,7 @@
 //#include <pcl/point_types.h>  // For the 'getCloud' interface - TODO: Should this return a "native" point3d type
 //#include <pcl/point_cloud.h>  // and we provide a PCL conversion seperately?
 
-namespace yak
-{
+namespace yak {
 /**
  * @brief The OfflineFusionServer class
  *
@@ -24,47 +23,46 @@ namespace yak
 class KF_EXPORTS FusionServer
 {
 public:
-  FusionServer(const kfusion::KinFuParams& params, const Eigen::Affine3f& world_to_volume);
+    FusionServer(const kfusion::KinFuParams& params, const Eigen::Affine3f& world_to_volume);
 
-  bool fuse(const cv::Mat& depth_data, const Eigen::Affine3f& world_to_camera);
+    bool fuse(const cv::Mat& depth_data, const Eigen::Affine3f& world_to_camera);
 
-  bool reset();
+    bool reset();
 
-  bool resetWithNewParams(const kfusion::KinFuParams& params);
+    bool resetWithNewParams(const kfusion::KinFuParams& params);
 
-  std::vector<Eigen::Vector3f> marchingCubes(int min_weight);
+    std::vector<Eigen::Vector3f> marchingCubes(int min_weight);
 
-  //  void getCloud(pcl::PointCloud<pcl::PointXYZ>& cloud) const;
+    //  void getCloud(pcl::PointCloud<pcl::PointXYZ>& cloud) const;
 
-  yak::TSDFContainer downloadTSDF();
+    yak::TSDFContainer downloadTSDF();
 
-  void display();
+    void display();
 
-  void display(const Eigen::Affine3f& pose);
+    void display(const Eigen::Affine3f& pose);
 
-  kfusion::KinFuParams& params() { return kinfu_->params(); }
+    kfusion::KinFuParams& params() { return kinfu_->params(); }
 
-  void render(kfusion::cuda::Image& device, const Eigen::Affine3f& pose);
-
+    void render(kfusion::cuda::Image& device, const Eigen::Affine3f& pose);
 
 private:
-  bool step(const Eigen::Affine3f& current_pose, const Eigen::Affine3f& last_pose, const cv::Mat& depth);
+    bool step(const Eigen::Affine3f& current_pose, const Eigen::Affine3f& last_pose, const cv::Mat& depth);
 
-  /**
-   * @brief Helper function for display() members; Downloads the active view from GPU and shows it in debug window
-   */
-  void downloadAndDisplayView();
+    /**
+     * @brief Helper function for display() members; Downloads the active view from GPU and shows it in debug window
+     */
+    void downloadAndDisplayView();
 
-  kfusion::KinFu::Ptr kinfu_;
-  kfusion::cuda::Image viewDevice_;
-  kfusion::cuda::Depth depthDevice_;
+    kfusion::KinFu::Ptr kinfu_;
+    kfusion::cuda::Image viewDevice_;
+    kfusion::cuda::Depth depthDevice_;
 
-  Eigen::Affine3f world_to_volume_;
-  Eigen::Affine3f volume_to_world_;
-  Eigen::Affine3f last_camera_pose_;
+    Eigen::Affine3f world_to_volume_;
+    Eigen::Affine3f volume_to_world_;
+    Eigen::Affine3f last_camera_pose_;
 
 public:
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
 } /* namespace yak */

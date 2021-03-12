@@ -3,13 +3,11 @@
 
 #include "cuda_runtime_api.h"
 
-namespace kfusion
-{
-namespace cuda
-{
+namespace kfusion {
+namespace cuda {
 void error(const char* error_string, const char* file, const int line, const char* func);
 }
-}  // namespace kfusion
+} // namespace kfusion
 
 #if defined(__GNUC__)
 #define cudaSafeCall(expr) kfusion::cuda::___cudaSafeCall(expr, __FILE__, __LINE__, __func__)
@@ -17,23 +15,23 @@ void error(const char* error_string, const char* file, const int line, const cha
 #define cudaSafeCall(expr) kfusion::cuda::___cudaSafeCall(expr, __FILE__, __LINE__)
 #endif
 
-namespace kfusion
-{
-namespace cuda
-{
+namespace kfusion {
+namespace cuda {
 static inline void ___cudaSafeCall(cudaError_t err, const char* file, const int line, const char* func = "")
 {
-  if (cudaSuccess != err)
-    error(cudaGetErrorString(err), file, line, func);
+    if (cudaSuccess != err)
+        error(cudaGetErrorString(err), file, line, func);
 }
 
-static inline int divUp(int total, int grain) { return (total + grain - 1) / grain; }
-}  // namespace cuda
-
-namespace device
+static inline int divUp(int total, int grain)
 {
+    return (total + grain - 1) / grain;
+}
+} // namespace cuda
+
+namespace device {
 using kfusion::cuda::divUp;
 }
-}  // namespace kfusion
+} // namespace kfusion
 
 #endif
